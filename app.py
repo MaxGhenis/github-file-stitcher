@@ -197,8 +197,7 @@ def main():
     st.sidebar.title("About")
     st.sidebar.info(
         """
-        GitHub Stitcher was created by Max Ghenis. 
-        For questions or feedback, please email [mghenis@gmail.com](mailto:mghenis@gmail.com).
+        GitHub Stitcher was created by [Max Ghenis](mailto:mghenis@gmail.com).
 
         This tool allows you to:
         - Fetch content from GitHub files, folders, or entire repositories
