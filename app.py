@@ -1,22 +1,29 @@
 import streamlit as st
 import re
+import requests
 from github import Github, GithubException
 from io import StringIO
 
 
 def parse_github_input(input_line):
+    pr_match = re.match(
+        r"https://github.com/([^/]+/[^/]+)/pull/(\d+)", input_line
+    )
+    if pr_match:
+        return "pr", pr_match.group(1), pr_match.group(2)
+
     if input_line.startswith("regex:"):
-        return None, input_line[6:].strip(), None
+        return "regex", None, input_line[6:].strip()
+
     match = re.match(
         r"https://github.com/([^/]+/[^/]+)(?:/tree/([^/]+))?(/.*)?", input_line
     )
     if match:
         repo_name = match.group(1)
-        branch = (
-            match.group(2) or "master"
-        )  # Default to 'master' if no branch specified
+        branch = match.group(2) or "master"
         path = match.group(3) or ""
-        return repo_name, path.lstrip("/"), branch
+        return "content", repo_name, (path.lstrip("/"), branch)
+
     return None, None, None
 
 
@@ -51,20 +58,40 @@ def get_file_content(
         return f"Error: Could not fetch content for {file_path}. {str(e)}"
 
 
+def get_pr_diff(owner, repo, pull_number, token):
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pull_number}"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3.diff",
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.text
+    else:
+        return f"Error fetching GitHub diff: {response.status_code}"
+
+
 def process_github_content(g, inputs, regex_patterns, keep_matching):
     output = StringIO()
+    github_token = st.secrets["GITHUB_TOKEN"]
 
     for input_line in inputs:
-        repo_name, path_or_pattern, branch = parse_github_input(input_line)
-        if not repo_name and not path_or_pattern.startswith("regex:"):
+        input_type, repo_name, extra_info = parse_github_input(input_line)
+
+        if input_type is None:
             output.write(f"\nInvalid input: {input_line}\n")
             continue
 
         output.write(f"\n\n--- Content from {input_line} ---\n")
         try:
-            if repo_name:
+            if input_type == "pr":
+                owner, repo = repo_name.split("/")
+                diff = get_pr_diff(owner, repo, extra_info, github_token)
+                output.write(diff)
+            elif input_type == "content":
                 repo = g.get_repo(repo_name)
-                contents = repo.get_contents(path_or_pattern, ref=branch)
+                path, branch = extra_info
+                contents = repo.get_contents(path, ref=branch)
                 if not isinstance(contents, list):
                     contents = [contents]
                 while contents:
@@ -84,11 +111,10 @@ def process_github_content(g, inputs, regex_patterns, keep_matching):
                         )
                         output.write(content)
                         output.write("\n")
-            else:
-                # This is a regex pattern for file paths
+            elif input_type == "regex":
                 for repo in g.get_user().get_repos():
                     for content in repo.get_contents(""):
-                        if re.match(path_or_pattern, content.path):
+                        if re.match(extra_info, content.path):
                             output.write(
                                 f"\n--- {repo.full_name}/{content.path} ---\n\n"
                             )
@@ -103,7 +129,7 @@ def process_github_content(g, inputs, regex_patterns, keep_matching):
         except GithubException as e:
             if e.status == 404:
                 output.write(
-                    f"Error: Repository or path not found. Please check the URL and ensure you have access to this repository.\n"
+                    f"Error: Repository, path, or PR not found. Please check the URL and ensure you have access to this repository.\n"
                 )
             else:
                 output.write(
@@ -122,7 +148,8 @@ def main():
     st.title("🧵 GitHub Stitcher")
     st.markdown(
         """
-    Stitch together content from GitHub repositories. Enter URLs to files or folders, or use regex patterns to match file paths.
+    Stitch together content from GitHub repositories or fetch PR diffs. 
+    Enter URLs to files, folders, PRs, or use regex patterns to match file paths.
     Filter content using regex patterns to keep or omit specific lines.
     """
     )
@@ -132,10 +159,11 @@ def main():
 
     # Input for GitHub URLs and regex patterns
     github_inputs = st.text_area(
-        "Enter GitHub URLs or regex patterns (one per line):",
+        "Enter GitHub URLs, PR links, or regex patterns (one per line):",
         height=150,
-        help="Enter URLs to files or folders, or use 'regex:' prefix for file path patterns. "
-        "e.g., https://github.com/username/repo/tree/branch/folder or regex:.*\\.py$",
+        help="Enter URLs to files, folders, PRs, or use 'regex:' prefix for file path patterns. "
+        "e.g., https://github.com/username/repo/tree/branch/folder, "
+        "https://github.com/username/repo/pull/123, or regex:.*\\.py$",
     )
 
     # Input for text filtering
@@ -157,7 +185,7 @@ def main():
     ):
         if not github_inputs:
             st.warning(
-                "⚠️ Please enter at least one GitHub URL or regex pattern."
+                "⚠️ Please enter at least one GitHub URL, PR link, or regex pattern."
             )
             return
 
@@ -201,6 +229,7 @@ def main():
 
         This tool allows you to:
         - Fetch content from GitHub files, folders, or entire repositories
+        - Fetch diffs from Pull Requests
         - Use regex patterns to filter specific file paths
         - Keep or omit lines based on regex patterns
         - Combine the filtered content into a single, easy-to-use output
