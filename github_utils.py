@@ -5,23 +5,38 @@ from io import StringIO
 import base64
 
 
-def parse_github_input(input_line):
-    pr_match = re.match(
-        r"https://github.com/([^/]+/[^/]+)/pull/(\d+)", input_line
-    )
-    if pr_match:
-        return "pr", pr_match.group(1), pr_match.group(2)
+def normalize_github_url(url):
+    """Normalize GitHub URLs to ensure they start with https://"""
+    if url.startswith(("github.com/", "github.com")):
+        return "https://" + url.lstrip("/")
+    return url
 
+
+def parse_github_input(input_line):
+    """Parse GitHub URLs and regex patterns into their components."""
+    # Handle regex patterns first since they shouldn't be normalized
     if input_line.startswith("regex:"):
         return "regex", None, input_line[6:].strip()
 
-    repo_match = re.match(r"https://github.com/([^/]+/[^/]+)/?$", input_line)
+    # Normalize the URL if it starts with github.com
+    input_line = normalize_github_url(input_line)
+
+    # Common URL patterns with or without https://
+    # PR pattern
+    pr_pattern = r"(?:https://)?github\.com/([^/]+/[^/]+)/pull/(\d+)"
+    pr_match = re.match(pr_pattern, input_line)
+    if pr_match:
+        return "pr", pr_match.group(1), pr_match.group(2)
+
+    # Repository root pattern
+    repo_pattern = r"(?:https://)?github\.com/([^/]+/[^/]+)/?$"
+    repo_match = re.match(repo_pattern, input_line)
     if repo_match:
         return "repo", repo_match.group(1), None
 
-    file_match = re.match(
-        r"https://github.com/([^/]+/[^/]+)/blob/([^/]+)/(.+)", input_line
-    )
+    # File pattern
+    file_pattern = r"(?:https://)?github\.com/([^/]+/[^/]+)/blob/([^/]+)/(.+)"
+    file_match = re.match(file_pattern, input_line)
     if file_match:
         return (
             "file",
@@ -29,9 +44,11 @@ def parse_github_input(input_line):
             (file_match.group(3), file_match.group(2)),
         )
 
-    content_match = re.match(
-        r"https://github.com/([^/]+/[^/]+)(?:/tree/([^/]+))?(/.*)?", input_line
+    # Content/tree pattern
+    content_pattern = (
+        r"(?:https://)?github\.com/([^/]+/[^/]+)(?:/tree/([^/]+))?(/.*)?"
     )
+    content_match = re.match(content_pattern, input_line)
     if content_match:
         repo_name = content_match.group(1)
         branch = content_match.group(2)
