@@ -9,20 +9,37 @@ def render_ui():
         "e.g., https://github.com/username/repo/tree/branch/folder, "
         "https://github.com/username/repo/pull/123, or regex:.*\\.py$",
     )
-
-    regex_patterns = st.text_area(
+    # Regex filtering to include or exclude files.
+    file_patterns = st.text_area(
+        "Enter regex patterns for file filtering (one per line):",
+        height=100,
+        help="These patterns will be used to filter which files to include or exclude. Leave empty to include all files. "
+        "e.g., .*\\.py$ for Python files, or .*test.* for test files",
+    )
+    file_filter_mode = st.radio(
+        "Choose filtering mode:",
+        ("Include matching files", "Exclude matching files"),
+        help="Select whether to include or exclude the files that match the regex patterns above.",
+    )
+    # Regex filtering to include or exclude lines.
+    line_patterns = st.text_area(
         "Enter regex patterns for text filtering (one per line):",
         height=100,
         help="These patterns will be used to filter the content of the files. Leave empty to include all content.",
     )
-
-    filter_mode = st.radio(
+    line_filter_mode = st.radio(
         "Choose filtering mode:",
-        ("Keep matching lines", "Omit matching lines"),
-        help="Select whether to keep or omit the lines that match the regex patterns above.",
+        ("Include matching lines", "Exclude matching lines"),
+        help="Select whether to include or exclude the lines that match the regex patterns above.",
     )
 
-    return github_inputs, regex_patterns, filter_mode
+    return (
+        github_inputs,
+        file_patterns,
+        file_filter_mode,
+        line_patterns,
+        line_filter_mode,
+    )
 
 
 def render_sidebar():

@@ -123,7 +123,112 @@ def get_pr_diff(owner, repo, pull_number, token):
         return f"Error fetching GitHub diff: {response.status_code}"
 
 
-def process_github_content(g, inputs, regex_patterns, keep_matching):
+def process_pr_content(owner, repo, pull_number, github_token):
+    """Process pull request content and return the diff."""
+    diff = get_pr_diff(owner, repo, pull_number, github_token)
+    return diff
+
+
+def process_file_content(
+    repo, file_content, branch, line_patterns, keep_matching_lines
+):
+    """Process individual file content with line filtering."""
+    content = get_file_content(
+        repo,
+        file_content.path,
+        line_patterns,
+        keep_matching_lines,
+        branch,
+    )
+    return f"\n--- {file_content.path} ---\n\n{content}\n"
+
+
+def should_include_file(file_path, file_patterns, keep_matching_files):
+    """Determine if a file should be included based on pattern matching."""
+    if not file_patterns:
+        return True
+    file_matches = any(
+        re.search(pattern, file_path) for pattern in file_patterns
+    )
+    return file_matches == keep_matching_files
+
+
+def process_repo_contents(
+    repo,
+    contents,
+    branch,
+    file_patterns,
+    keep_matching_files,
+    line_patterns,
+    keep_matching_lines,
+):
+    """Process repository contents with file and line filtering."""
+    output = StringIO()
+    if not isinstance(contents, list):
+        contents = [contents]
+
+    while contents:
+        file_content = contents.pop(0)
+        if file_content.type == "dir":
+            contents.extend(repo.get_contents(file_content.path, ref=branch))
+        elif should_include_file(
+            file_content.path, file_patterns, keep_matching_files
+        ):
+            content = process_file_content(
+                repo, file_content, branch, line_patterns, keep_matching_lines
+            )
+            output.write(content)
+
+    return output.getvalue()
+
+
+def process_regex_content(
+    g,
+    pattern,
+    file_patterns,
+    keep_matching_files,
+    line_patterns,
+    keep_matching_lines,
+):
+    """Process content matching regex pattern across user's repositories."""
+    output = StringIO()
+    for repo in g.get_user().get_repos():
+        default_branch = get_default_branch(repo)
+        for content in repo.get_contents("", ref=default_branch):
+            if re.match(pattern, content.path) and should_include_file(
+                content.path, file_patterns, keep_matching_files
+            ):
+                content_str = process_file_content(
+                    repo,
+                    content,
+                    default_branch,
+                    line_patterns,
+                    keep_matching_lines,
+                )
+                output.write(f"\n{repo.full_name}/{content_str}")
+
+    return output.getvalue()
+
+
+def process_github_content(
+    g,
+    inputs,
+    file_patterns,
+    keep_matching_files,
+    line_patterns=None,
+    keep_matching_lines=True,
+):
+    """
+    Process GitHub content with separate file and line pattern filtering.
+
+    Args:
+        g: Github instance
+        inputs: List of GitHub URLs/inputs to process
+        file_patterns: List of regex patterns for filtering files
+        keep_matching_files: Boolean to keep or exclude matching files
+        line_patterns: List of regex patterns for filtering lines within files
+        keep_matching_lines: Boolean to keep or exclude matching lines
+    """
     output = StringIO()
     github_token = g._Github__requester._Requester__auth.token
     error_occurred = False
@@ -140,15 +245,17 @@ def process_github_content(g, inputs, regex_patterns, keep_matching):
         try:
             if input_type == "pr":
                 owner, repo = repo_name.split("/")
-                diff = get_pr_diff(owner, repo, extra_info, github_token)
-                output.write(diff)
+                content = process_pr_content(
+                    owner, repo, extra_info, github_token
+                )
+                output.write(content)
+
             elif input_type in ["content", "repo", "file"]:
                 repo = g.get_repo(repo_name)
+                branch = get_default_branch(repo)
+
                 if input_type == "repo":
-                    contents = repo.get_contents(
-                        "", ref=get_default_branch(repo)
-                    )
-                    branch = get_default_branch(repo)
+                    contents = repo.get_contents("", ref=branch)
                 elif input_type == "file":
                     file_path, branch = extra_info
                     contents = [repo.get_contents(file_path, ref=branch)]
@@ -157,43 +264,28 @@ def process_github_content(g, inputs, regex_patterns, keep_matching):
                     branch = branch or get_default_branch(repo)
                     contents = repo.get_contents(path, ref=branch)
 
-                if not isinstance(contents, list):
-                    contents = [contents]
+                content = process_repo_contents(
+                    repo,
+                    contents,
+                    branch,
+                    file_patterns,
+                    keep_matching_files,
+                    line_patterns,
+                    keep_matching_lines,
+                )
+                output.write(content)
 
-                while contents:
-                    file_content = contents.pop(0)
-                    if file_content.type == "dir":
-                        contents.extend(
-                            repo.get_contents(file_content.path, ref=branch)
-                        )
-                    else:
-                        output.write(f"\n--- {file_content.path} ---\n\n")
-                        content = get_file_content(
-                            repo,
-                            file_content.path,
-                            regex_patterns,
-                            keep_matching,
-                            branch,
-                        )
-                        output.write(content)
-                        output.write("\n")
             elif input_type == "regex":
-                for repo in g.get_user().get_repos():
-                    default_branch = get_default_branch(repo)
-                    for content in repo.get_contents("", ref=default_branch):
-                        if re.match(extra_info, content.path):
-                            output.write(
-                                f"\n--- {repo.full_name}/{content.path} ---\n\n"
-                            )
-                            content = get_file_content(
-                                repo,
-                                content.path,
-                                regex_patterns,
-                                keep_matching,
-                                default_branch,
-                            )
-                            output.write(content)
-                            output.write("\n")
+                content = process_regex_content(
+                    g,
+                    extra_info,
+                    file_patterns,
+                    keep_matching_files,
+                    line_patterns,
+                    keep_matching_lines,
+                )
+                output.write(content)
+
         except GithubException as e:
             if e.status == 404:
                 output.write(
