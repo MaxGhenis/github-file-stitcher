@@ -19,7 +19,13 @@ def main():
 
     github_token = st.secrets["GITHUB_TOKEN"]
 
-    github_inputs, regex_patterns, filter_mode = render_ui()
+    (
+        github_inputs,
+        file_patterns,
+        file_filter_mode,
+        line_patterns,
+        line_filter_mode,
+    ) = render_ui()
 
     if st.button(
         "🧵 Stitch Content", help="Click to fetch and stitch the content"
@@ -33,17 +39,26 @@ def main():
         inputs = [
             line.strip() for line in github_inputs.split("\n") if line.strip()
         ]
-        patterns = [
+        file_patterns = [
             pattern.strip()
-            for pattern in regex_patterns.split("\n")
+            for pattern in file_patterns.split("\n")
             if pattern.strip()
         ]
-        keep_matching = filter_mode == "Keep matching lines"
+        line_patterns = [
+            pattern.strip()
+            for pattern in line_patterns.split("\n")
+            if pattern.strip()
+        ]
 
         with st.spinner("Fetching and stitching content..."):
             g = Github(github_token)
             all_content, error_occurred = process_github_content(
-                g, inputs, patterns, keep_matching
+                g,
+                inputs,
+                file_patterns,
+                file_filter_mode == "Include matching files",
+                line_patterns,
+                line_filter_mode == "Include matching lines",
             )
 
             if error_occurred:
