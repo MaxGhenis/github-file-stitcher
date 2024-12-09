@@ -1,8 +1,9 @@
 import re
 import base64
 from typing import List, Union, Optional
-from core.ContentFile import ContentFile
-from core.Repository import Repository
+from github import Github
+from github.ContentFile import ContentFile
+from github.Repository import Repository
 from .base import ContentProcessor
 from ..config import GITHUB_MAX_FILE_SIZE, BINARY_FILE_EXTENSIONS
 

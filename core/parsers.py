@@ -15,12 +15,15 @@ def parse_github_input(
     Optional[str], Optional[str], Optional[Union[str, Tuple[str, str]]]
 ]:
     """Parse GitHub URLs and regex patterns into their components."""
+    print(f"Parsing input: {input_line}")  # Debug line
+
     # Handle regex patterns
     if input_line.startswith("regex:"):
         return "regex", None, input_line[6:].strip()
 
     # Normalize the URL
     input_line = normalize_github_url(input_line)
+    print(f"Normalized URL: {input_line}")  # Debug line
 
     patterns = {
         "issue": (
@@ -45,9 +48,13 @@ def parse_github_input(
         ),
     }
 
-    for pattern, handler in patterns.items():
-        match = re.match(pattern[0], input_line)
+    for pattern_name, (regex, handler) in patterns.items():
+        print(f"Trying {pattern_name} pattern")  # Debug line
+        match = re.match(regex, input_line)
         if match:
-            return handler(match)
+            result = handler(match)
+            print(f"Matched {pattern_name}: {result}")  # Debug line
+            return result
 
+    print("No pattern matched")  # Debug line
     return None, None, None

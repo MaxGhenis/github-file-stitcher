@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from io import StringIO
 from github import Github
 from github.GithubException import GithubException
@@ -34,6 +34,9 @@ class GitHubAPI:
 
         for input_line in inputs:
             input_type, repo_name, extra_info = parse_github_input(input_line)
+            print(
+                f"Parsed input: type={input_type}, repo={repo_name}, extra={extra_info}"
+            )  # Debug line
 
             if input_type is None:
                 output.write(f"\nInvalid input: {input_line}\n")
@@ -45,6 +48,9 @@ class GitHubAPI:
             try:
                 processor = self.processors.get(input_type)
                 if processor:
+                    print(
+                        f"Using processor: {processor.__class__.__name__}"
+                    )  # Debug line
                     content = processor.process(
                         repo_name,
                         extra_info,
@@ -59,9 +65,12 @@ class GitHubAPI:
                     error_occurred = True
 
             except GithubException as e:
-                output.write(self._handle_github_exception(e))
+                error_msg = self._handle_github_exception(e)
+                print(f"GitHub Exception: {error_msg}")  # Debug line
+                output.write(error_msg)
                 error_occurred = True
             except Exception as e:
+                print(f"Unexpected error: {str(e)}")  # Debug line
                 output.write(f"An error occurred: {str(e)}\n")
                 error_occurred = True
 
