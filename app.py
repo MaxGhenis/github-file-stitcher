@@ -1,23 +1,31 @@
 import streamlit as st
-from github import Github
-from github_utils import process_github_content
-from ui import render_ui, render_sidebar
+from core.github_api import GitHubAPI
+from core.config import (
+    PAGE_TITLE,
+    PAGE_ICON,
+    PAGE_LAYOUT,
+    ERROR_MESSAGES,
+)
+from ui.layout import render_ui, render_sidebar
 
-# Set page config at the very beginning
-st.set_page_config(page_title="GitHub Stitcher", page_icon="🧵", layout="wide")
+# Set page config
+st.set_page_config(
+    page_title=PAGE_TITLE, page_icon=PAGE_ICON, layout=PAGE_LAYOUT
+)
 
 
 def main():
-    st.title("🧵 GitHub Stitcher")
+    st.title(f"{PAGE_ICON} {PAGE_TITLE}")
     st.markdown(
         """
-    Stitch together content from GitHub repositories or fetch PR diffs. 
-    Enter URLs to files, folders, PRs, or use regex patterns to match file paths.
+    Stitch together content from GitHub repositories, PRs, or issues. 
+    Enter URLs to files, folders, PRs, issues, or use regex patterns to match file paths.
     Filter content using regex patterns to keep or omit specific lines.
     """
     )
 
     github_token = st.secrets["GITHUB_TOKEN"]
+    github_api = GitHubAPI(github_token)
 
     (
         github_inputs,
@@ -31,9 +39,7 @@ def main():
         "🧵 Stitch Content", help="Click to fetch and stitch the content"
     ):
         if not github_inputs:
-            st.warning(
-                "⚠️ Please enter at least one GitHub URL, PR link, or regex pattern."
-            )
+            st.warning(ERROR_MESSAGES["no_input"])
             return
 
         inputs = [
@@ -51,9 +57,7 @@ def main():
         ]
 
         with st.spinner("Fetching and stitching content..."):
-            g = Github(github_token)
-            all_content, error_occurred = process_github_content(
-                g,
+            all_content, error_occurred = github_api.process_content(
                 inputs,
                 file_patterns,
                 file_filter_mode == "Include matching files",
@@ -74,8 +78,8 @@ def main():
             st.download_button(
                 "💾 Download Stitched Content",
                 all_content,
-                "stitched_content.txt",
-                help="Click to download the stitched content as a text file",
+                "stitched_content.md",
+                help="Click to download the stitched content as a markdown file",
             )
 
     render_sidebar()

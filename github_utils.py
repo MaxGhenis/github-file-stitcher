@@ -1,6 +1,6 @@
 import re
 import requests
-from github import Github, GithubException
+from core import Github, GithubException
 from io import StringIO
 import base64
 
