@@ -18,6 +18,9 @@ class GitHubAPI:
             "pr": PRProcessor(self.github),
             "repo": RepoProcessor(self.github),
             "regex": RegexProcessor(self.github),
+            # Add file type but use the same RepoProcessor since it can handle both files and directories
+            "file": RepoProcessor(self.github),
+            "content": RepoProcessor(self.github),
         }
 
     def process_content(
@@ -36,7 +39,7 @@ class GitHubAPI:
             input_type, repo_name, extra_info = parse_github_input(input_line)
             print(
                 f"Parsed input: type={input_type}, repo={repo_name}, extra={extra_info}"
-            )  # Debug line
+            )
 
             if input_type is None:
                 output.write(f"\nInvalid input: {input_line}\n")
@@ -48,9 +51,7 @@ class GitHubAPI:
             try:
                 processor = self.processors.get(input_type)
                 if processor:
-                    print(
-                        f"Using processor: {processor.__class__.__name__}"
-                    )  # Debug line
+                    print(f"Using processor: {processor.__class__.__name__}")
                     content = processor.process(
                         repo_name,
                         extra_info,
@@ -66,11 +67,11 @@ class GitHubAPI:
 
             except GithubException as e:
                 error_msg = self._handle_github_exception(e)
-                print(f"GitHub Exception: {error_msg}")  # Debug line
+                print(f"GitHub Exception: {error_msg}")
                 output.write(error_msg)
                 error_occurred = True
             except Exception as e:
-                print(f"Unexpected error: {str(e)}")  # Debug line
+                print(f"Unexpected error: {str(e)}")
                 output.write(f"An error occurred: {str(e)}\n")
                 error_occurred = True
 

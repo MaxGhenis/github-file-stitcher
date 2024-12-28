@@ -1,6 +1,5 @@
-import re
-import base64
 from typing import List, Union, Optional
+import urllib.parse
 from github import Github
 from github.ContentFile import ContentFile
 from github.Repository import Repository
@@ -20,31 +19,68 @@ class RepoProcessor(ContentProcessor):
         **kwargs,
     ) -> str:
         """Process repository contents with file and line filtering."""
-        repo = self.get_repo(repo_name)
+        try:
+            print(f"\nDEBUG: Processing repository: {repo_name}")
+            print(f"DEBUG: Extra info: {extra_info}")
 
-        # Handle different input types
-        if isinstance(extra_info, tuple):  # File or content path
-            path, branch = extra_info
-            branch = branch or repo.default_branch
-            contents = [repo.get_contents(path, ref=branch)]
-        else:  # Repository root
-            branch = repo.default_branch
-            contents = repo.get_contents("", ref=branch)
+            repo = self.get_repo(repo_name)
+            print(f"DEBUG: Default branch: {repo.default_branch}")
 
-        return self._process_contents(
-            repo,
-            contents,
-            branch,
-            file_patterns,
-            keep_matching_files,
-            line_patterns,
-            keep_matching_lines,
-        )
+            # Handle different input types
+            if isinstance(extra_info, tuple):
+                path, branch = extra_info
+                print(f"DEBUG: Raw path: '{path}', branch: '{branch}'")
+
+                if branch:
+                    # Don't URL encode the branch name yet
+                    print(f"DEBUG: Using specified branch: '{branch}'")
+                else:
+                    branch = repo.default_branch
+                    print(f"DEBUG: Using default branch: '{branch}'")
+
+                try:
+                    if path:
+                        print(
+                            f"DEBUG: Fetching specific path: '{path}' from branch: '{branch}'"
+                        )
+                        contents = repo.get_contents(path, ref=branch)
+                    else:
+                        print(
+                            f"DEBUG: Fetching root contents from branch: '{branch}'"
+                        )
+                        contents = repo.get_contents("", ref=branch)
+                    print("DEBUG: Successfully fetched contents")
+
+                except Exception as e:
+                    error_msg = f"Error fetching content from branch '{branch}': {str(e)}"
+                    print(f"DEBUG: {error_msg}")
+                    return error_msg
+            else:
+                branch = repo.default_branch
+                print(
+                    f"DEBUG: Using default branch (no extra info): '{branch}'"
+                )
+                contents = repo.get_contents("", ref=branch)
+
+            return self._process_contents(
+                repo,
+                contents,
+                branch,
+                file_patterns,
+                keep_matching_files,
+                line_patterns,
+                keep_matching_lines,
+            )
+
+        except Exception as e:
+            error_msg = f"Error processing repository: {str(e)}"
+            print(f"DEBUG: {error_msg}")
+            return error_msg
 
     def _process_contents(
         self,
         repo: Repository,
-        contents: List[ContentFile],
+        contents: Union[List[ContentFile], ContentFile],
         branch: str,
         file_patterns: Optional[List[str]],
         keep_matching_files: bool,
@@ -52,34 +88,41 @@ class RepoProcessor(ContentProcessor):
         keep_matching_lines: bool,
     ) -> str:
         """Process list of content files recursively."""
+        print(f"\nDEBUG: Processing contents for branch: '{branch}'")
+
         result = []
         if not isinstance(contents, list):
             contents = [contents]
 
         while contents:
             content = contents.pop(0)
+            try:
+                print(f"\nDEBUG: Processing content: {content.path}")
 
-            # Handle directories recursively
-            if content.type == "dir":
-                dir_contents = repo.get_contents(content.path, ref=branch)
-                contents.extend(dir_contents)
-                continue
+                # Handle directories recursively
+                if content.type == "dir":
+                    print(f"DEBUG: Found directory: {content.path}")
+                    dir_contents = repo.get_contents(content.path, ref=branch)
+                    if isinstance(dir_contents, list):
+                        contents.extend(dir_contents)
+                    else:
+                        contents.append(dir_contents)
+                    continue
 
-            # Check if file matches patterns
-            if not self._should_include_file(
-                content.path, file_patterns, keep_matching_files
-            ):
-                continue
-
-            # Process the file
-            file_content = self._get_file_content(
-                repo, content, branch, line_patterns, keep_matching_lines
-            )
-
-            if file_content:
-                result.extend(
-                    [f"\n--- {content.path} ---\n\n", file_content, "\n"]
+                # Process the file
+                file_content = self._get_file_content(
+                    repo, content, branch, line_patterns, keep_matching_lines
                 )
+
+                if file_content:
+                    result.extend(
+                        [f"\n--- {content.path} ---\n\n", file_content, "\n"]
+                    )
+
+            except Exception as e:
+                error_msg = f"\nError processing {content.path}: {str(e)}\n"
+                print(f"DEBUG: {error_msg}")
+                result.append(error_msg)
 
         return "".join(result)
 
@@ -104,12 +147,10 @@ class RepoProcessor(ContentProcessor):
                     return f"[Binary {type_name} file: {content.path}]"
 
             # Decode content
-            file_content = base64.b64decode(content.content).decode(
-                "utf-8", errors="replace"
-            )
+            file_content = self._decode_content(content)
 
             # Apply line filtering if patterns are provided
-            if line_patterns:
+            if line_patterns and file_content:
                 lines = file_content.split("\n")
                 lines = [
                     line
@@ -127,22 +168,22 @@ class RepoProcessor(ContentProcessor):
                 f"Error: Could not fetch content for {content.path}. {str(e)}"
             )
 
-    def _should_include_file(
-        self,
-        file_path: str,
-        patterns: Optional[List[str]],
-        keep_matching: bool,
-    ) -> bool:
-        """Determine if a file should be included based on patterns."""
-        if not patterns:
-            return True
+    def _decode_content(self, content: ContentFile) -> str:
+        """Safely decode content from base64."""
+        try:
+            import base64
 
-        matches = any(re.search(pattern, file_path) for pattern in patterns)
-        return matches == keep_matching
+            return base64.b64decode(content.content).decode(
+                "utf-8", errors="replace"
+            )
+        except Exception as e:
+            return f"Error decoding content: {str(e)}"
 
     def _should_include_line(
         self, line: str, patterns: List[str], keep_matching: bool
     ) -> bool:
         """Determine if a line should be included based on patterns."""
+        import re
+
         matches = any(re.search(pattern, line) for pattern in patterns)
         return matches == keep_matching
