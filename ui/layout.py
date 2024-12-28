@@ -41,21 +41,51 @@ def render_sidebar():
     """Render the sidebar with information and help."""
     st.sidebar.markdown(
         """
-    # About
-    GitHub Stitcher helps you combine content from various GitHub sources:
-    
-    - Repository files and folders
-    - Pull request diffs
-    - Issue discussions
-    - Pattern-matched files
-    
-    ## Features
-    - File path filtering
-    - Line content filtering
-    - Markdown output
-    - Support for large repositories
-    
-    ## Help
-    Need help? Check out the [documentation](https://github.com/your-repo/github-stitcher)
-    """
+        # About
+        GitHub Stitcher helps you combine and filter content from GitHub. Enter URLs or patterns in any format:
+
+        ### 📄 Files
+        ```
+        github.com/owner/repo/blob/branch/file.py
+        ```
+
+        ### 📁 Directories
+        ```
+        github.com/owner/repo/tree/branch/dir
+        ```
+
+        ### 🔍 Pattern Matching
+        ```
+        regex:.*\.py$
+        ```
+
+        ### 🔀 Pull Requests
+        ```
+        github.com/owner/repo/pull/123
+        ```
+
+        ### ❓ Issues
+        ```
+        github.com/owner/repo/issues/456
+        ```
+
+        ### 💡 Tips
+        - Enter multiple URLs (one per line)
+        - Use regex patterns to filter specific files
+        - Branch names can include slashes
+        - Default branch is used if not specified
+        - Expand "Advanced Filtering" for more options
+
+        ### 🛠️ Advanced Features
+        - Line filtering with regex
+        - Include/exclude mode for both files and lines
+        - Syntax highlighting
+        - Downloadable output
+
+        ### 🔗 Links
+        - [Documentation](https://github.com/your-username/github-stitcher)
+        - [Report an Issue](https://github.com/your-username/github-stitcher/issues)
+        
+        Created by [Max Ghenis](https://github.com/maxghenis)
+        """
     )
